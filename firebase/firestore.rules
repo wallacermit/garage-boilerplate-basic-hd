@@ -56,6 +56,107 @@ service cloud.firestore {
       allow delete: if false; // soft-delete only — set deletedAt field instead
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // SAVED CHECK SETS FEATURE — server-side logic
+    // ══════════════════════════════════════════════════════════════════════
+    // The browser writes checkSets and checks directly with the client SDK,
+    // so THESE RULES are the security boundary. Google's servers run them on
+    // every read and write; a user cannot skip them by editing browser code.
+    // Limits match frontend/src/features/check-sets/checkSet.schema.ts.
+    //
+    // What they enforce:
+    //   1. Only a signed-in user with a VERIFIED email can use the feature
+    //   2. You can only read or write your own documents (uid == your uid)
+    //   3. Exact field list — no extra fields (e.g. no sneaking in "role")
+    //   4. Value rules — lengths, the 6 contract operators, fail|warning
+    //   5. Timestamps come from the server (== request.time), not the browser
+    //   6. Some fields never change after creation (uid, createdAt, setId)
+    //   7. Sets are soft-deleted only, and a deleted set is frozen
+
+    // Rule 1 + 2: signed in, email verified, and the document belongs to them.
+    // (The app already blocks unverified sign-in; this enforces it server-side too.)
+    function isVerifiedOwner(uid) {
+      return isOwner(uid) && request.auth.token.email_verified == true;
+    }
+
+    // Rule 3 + 4 for a check set document
+    function validCheckSet(d) {
+      let fields = ['uid', 'name', 'description', 'checkCount',
+                    'createdAt', 'updatedAt', 'deletedAt', '_schemaVersion'];
+      return d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+        && d.name is string && d.name.trim().size() > 0 && d.name.size() <= 60
+        && d.description is string && d.description.size() <= 280
+        && d.checkCount is int && d.checkCount >= 1 && d.checkCount <= 50
+        && d._schemaVersion == 1;
+    }
+
+    // checkSets/{setId} — a named group of checks owned by one user
+    match /checkSets/{setId} {
+      // READ: owner only. A list query must include where('uid', '==', myUid),
+      // because rules are not filters — a query that COULD return another
+      // user's set is refused as a whole.
+      allow read: if isVerifiedOwner(resource.data.uid);
+
+      // CREATE: for yourself only, valid fields, server timestamps, starts active
+      allow create: if isVerifiedOwner(request.resource.data.uid)
+        && validCheckSet(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.deletedAt == null;
+
+      // UPDATE (edit or soft-delete):
+      //   - owner only, and the set is not already deleted
+      //   - uid and createdAt can never change
+      //   - updatedAt must be the server time
+      //   - deletedAt can only stay null, or be set to "now" (soft delete)
+      allow update: if isVerifiedOwner(resource.data.uid)
+        && resource.data.deletedAt == null
+        && validCheckSet(request.resource.data)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.deletedAt == null
+            || request.resource.data.deletedAt == request.time);
+
+      // DELETE: never — soft-delete only (set deletedAt instead)
+      allow delete: if false;
+    }
+
+    // Rule 3 + 4 for a check document
+    function validCheck(d) {
+      let fields = ['uid', 'setId', 'property', 'operator', 'expectedValue',
+                    'severity', 'order', '_schemaVersion'];
+      return d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+        && d.setId is string && d.setId.size() > 0
+        && d.property is string && d.property.trim().size() > 0 && d.property.size() <= 100
+        // Only the six operators from the ValidationAgent contract v2.0.0
+        && d.operator in ['equals', 'in_set', 'greater_than_or_equal',
+                          'less_than_or_equal', 'within_tolerance', 'exists']
+        && d.expectedValue is string && d.expectedValue.size() <= 200
+        // Every operator except "exists" needs a value to compare against
+        && (d.operator == 'exists' || d.expectedValue.trim().size() > 0)
+        && d.severity in ['fail', 'warning']
+        && d.order is int && d.order >= 0 && d.order < 50
+        && d._schemaVersion == 1;
+    }
+
+    // checks/{checkId} — one property check inside a set
+    match /checks/{checkId} {
+      allow read: if isVerifiedOwner(resource.data.uid);
+
+      allow create: if isVerifiedOwner(request.resource.data.uid)
+        && validCheck(request.resource.data);
+
+      // A check can never move to another owner or another set
+      allow update: if isVerifiedOwner(resource.data.uid)
+        && validCheck(request.resource.data)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.setId == resource.data.setId;
+
+      // Removing a row while editing a set deletes that check
+      allow delete: if isVerifiedOwner(resource.data.uid);
+    }
+
     // Add new collection rules above this comment using the /firebase-collection skill.
 
     // ── Default deny ───────────────────────────────────────────────────────
