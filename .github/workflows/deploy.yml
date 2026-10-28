@@ -1,0 +1,79 @@
+# .github/workflows/deploy.yml
+#
+# Runs automatically after the CI workflow finishes on `main` (i.e. after a PR is merged).
+# It only deploys if CI passed, so broken code never goes live.
+#
+#   1. deploy-firestore-rules → pushes firebase/firestore.rules to Firebase
+#   2. deploy-frontend        → builds the Next.js app and deploys it to Vercel (production)
+#
+# Secrets needed (GitHub → Settings → Secrets and variables → Actions):
+#   FIREBASE_PROJECT_ID, FIREBASE_SERVICE_ACCOUNT_KEY_BASE64,
+#   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+name: Deploy to Production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual "Run workflow" button as a fallback
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-firestore-rules:
+    name: Deploy Firestore Rules
+    # Only when CI succeeded (or when run by hand)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64 }}" | base64 --decode > /tmp/gcp-sa.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa.json" >> $GITHUB_ENV
+
+      - name: Deploy Firestore rules
+        run: |
+          npx firebase-tools deploy \
+            --only firestore:rules \
+            --project ${{ secrets.FIREBASE_PROJECT_ID }} \
+            --non-interactive
+
+  deploy-frontend:
+    name: Deploy Frontend to Vercel
+    needs: deploy-firestore-rules # rules first, so the new UI never runs against old rules
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pull Vercel project settings and env vars
+        run: npx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: npx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to production
+        id: deploy
+        run: |
+          url=$(npx vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "Live at: $url"
+          echo "### Deployed to $url" >> $GITHUB_STEP_SUMMARY

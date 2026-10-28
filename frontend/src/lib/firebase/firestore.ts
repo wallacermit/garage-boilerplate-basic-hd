@@ -1,6 +1,6 @@
 import { collection, doc, type CollectionReference, type DocumentData } from 'firebase/firestore'
 import { getClientDb } from './client'
-import type { UserProfile } from '@/types/firestore'
+import type { Check, CheckSet, UserProfile } from '@/types/firestore'
 
 /**
  * Creates a typed Firestore collection reference.
@@ -22,4 +22,20 @@ export function getUsersCollection() {
 
 export function userDoc(uid: string) {
   return doc(getUsersCollection(), uid)
+}
+
+export function getCheckSetsCollection() {
+  return typedCollection<CheckSet>('checkSets')
+}
+
+export function checkSetDoc(setId: string) {
+  return doc(getCheckSetsCollection(), setId)
+}
+
+export function getChecksCollection() {
+  return typedCollection<Check>('checks')
+}
+
+export function checkDoc(checkId: string) {
+  return doc(getChecksCollection(), checkId)
 }
