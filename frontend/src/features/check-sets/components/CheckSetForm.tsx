@@ -172,15 +172,11 @@ export function CheckSetForm({ existing }: CheckSetFormProps) {
           </button>
         </div>
 
-        {/* Errors about the list as a whole (e.g. "Add at least one check") */}
+        {/* Errors about the list as a whole ("Add at least one check" / "at most 50").
+            The Add and Remove buttons already prevent both, so this is a safety net. */}
         {errors.checks?.root && (
           <p className="text-xs text-red-500" role="alert">
             {errors.checks.root.message}
-          </p>
-        )}
-        {errors.checks?.message && (
-          <p className="text-xs text-red-500" role="alert">
-            {errors.checks.message}
           </p>
         )}
 

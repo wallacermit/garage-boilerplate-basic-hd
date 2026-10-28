@@ -4,7 +4,8 @@
  *
  * PURPOSE
  *   Proves the Firestore security rules for the Saved Check Sets feature work,
- *   against the REAL Firebase project in your .env (after `firebase deploy --only firestore:rules`).
+ *   against the REAL Firebase project in your .env. The rules must be deployed first
+ *   (the Deploy workflow does this on every merge to main).
  *
  * HOW
  *   1. The Admin SDK creates three throwaway users:
