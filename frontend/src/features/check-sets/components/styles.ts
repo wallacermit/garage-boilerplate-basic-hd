@@ -1,7 +1,7 @@
 /**
  * FILE: features/check-sets/components/styles.ts
  * PURPOSE: Shared Tailwind classes so every input in the feature looks the same.
- * USED BY: CheckSetForm.tsx, CheckSetList.tsx
+ * USED BY: CheckSetForm.tsx, CheckSetList.tsx, EditCheckSet.tsx
  */
 
 /** Text inputs, textareas and selects. Turns red when aria-invalid is set; greys out when read-only. */

@@ -18,7 +18,7 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { uid: 'user-1' } })
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-// Mock the Firestore calls; keep the real friendlyError so the error message is realistic.
+// Mock the Firestore calls. friendlyError returns a fixed message so the test can look for it.
 vi.mock('@/features/check-sets/services/checkSets.service', () => ({
   createCheckSet: vi.fn(),
   updateCheckSet: vi.fn(),
