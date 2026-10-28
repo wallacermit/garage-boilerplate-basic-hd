@@ -29,6 +29,16 @@ Merge to main
 
 **Why the frontend isn't in `deploy.yml`:** this app is server-rendered (Server Actions, `/api/auth/session`, `proxy.ts`), so it needs a server host, not static Firebase Hosting. Vercel's free Hobby tier runs Next.js SSR natively with no billing account required — see **Vercel Setup** below. Firebase Hosting could also do this via its `frameworksBackend` integration, but that runs on Cloud Functions/Cloud Run under the hood, which requires the paid Blaze plan even at zero traffic — Vercel avoids that entirely for the frontend.
 
+## This fork's setup (Saved Check Sets feature)
+
+This fork deploys the frontend from GitHub Actions instead of Vercel's GitHub integration, so the deploy runs only after CI passes and its log sits next to the tests:
+
+- `deploy.yml` is triggered by `workflow_run` when **CI** completes successfully on `main` (or by "Run workflow").
+- Job 1 deploys `firebase/firestore.rules`; job 2 runs `vercel pull` → `vercel build --prod` → `vercel deploy --prebuilt --prod`.
+- `frontend/vercel.json` sets `git.deploymentEnabled: false`, so Vercel does not also deploy on push.
+- Extra secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (plus the two Firebase secrets below).
+- The `pnpm audit` step in CI is report-only (`continue-on-error`) because of advisories in the boilerplate's own dependencies.
+
 ## Vercel Setup (Frontend)
 
 1. [vercel.com](https://vercel.com) → **Add New Project** → import this GitHub repo
